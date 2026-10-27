@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "flags": {
+    "moduleEnabled": {
+      "name": "Module enabled",
+      "description": "Kill switch. When disabled the shell hides this module from navigation and routing."
+    },
+    "releaseTimeline": {
+      "name": "Release timeline",
+      "description": "Show the release timeline widget. Rolled out to 25% of users, plus everyone at the QA domain."
+    }
+  },
+  "values": {
+    "moduleEnabled": { "enabled": true },
+    "releaseTimeline": {
+      "_variants": [
+        {
+          "name": "QA testers",
+          "enabled": true,
+          "rule": "(ends_with $email \"@qa.example.gov\")"
+        },
+        {
+          "name": "Gradual rollout",
+          "enabled": true,
+          "rule": "(split by::$userId pct::25 seed::\"release-timeline\")"
+        },
+        { "name": "Default", "enabled": false }
+      ]
+    }
+  }
+}

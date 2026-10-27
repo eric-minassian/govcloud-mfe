@@ -1,0 +1,31 @@
+{
+  "name": "@govcloud-mfe/release-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Publishes, promotes and rolls back micro-frontend versions in a stage's artifact bucket.",
+  "type": "module",
+  "bin": {
+    "release": "./src/cli.ts"
+  },
+  "scripts": {
+    "cli": "tsx src/cli.ts",
+    "build": "esbuild src/cli.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/release.mjs --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/client-ssm": "catalog:",
+    "@aws-sdk/credential-providers": "catalog:",
+    "@govcloud-mfe/contracts": "workspace:*",
+    "commander": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "aws-sdk-client-mock": "catalog:",
+    "esbuild": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

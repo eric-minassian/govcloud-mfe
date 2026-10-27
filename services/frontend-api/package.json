@@ -1,0 +1,12 @@
+{
+  "name": "@govcloud-mfe/frontend-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Thin wrapper so `pnpm dev` / turbo can drive the Rust service alongside the frontends.",
+  "scripts": {
+    "dev": "APP_ENV=local cargo run",
+    "build": "cargo build --release",
+    "test": "cargo test",
+    "lint": "cargo clippy --all-targets -- -D warnings"
+  }
+}

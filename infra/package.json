@@ -1,0 +1,25 @@
+{
+  "name": "@govcloud-mfe/infra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AWS CDK app: shared platform, per-app runtime resources and per-app pipelines.",
+  "type": "module",
+  "scripts": {
+    "cdk": "cdk",
+    "synth": "cdk synth --quiet",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@govcloud-mfe/contracts": "workspace:*",
+    "aws-cdk-lib": "catalog:",
+    "constructs": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "aws-cdk": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

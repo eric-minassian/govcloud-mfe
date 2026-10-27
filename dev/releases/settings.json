@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "app": "settings",
+  "kind": "remote",
+  "version": "local",
+  "entry": "http://localhost:3002/mf-manifest.json",
+  "displayName": "Settings",
+  "route": "/settings",
+  "exposedModule": "./App",
+  "commit": "local",
+  "releasedAt": "1970-01-01T00:00:00.000Z",
+  "releasedBy": "local-dev"
+}

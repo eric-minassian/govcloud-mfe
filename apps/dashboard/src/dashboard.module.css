@@ -1,0 +1,15 @@
+/* CSS Modules: class names are hashed at build time, so styles from independently deployed
+   modules can't collide. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--gm-gap);
+}
+
+.timeline {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.timeline li {
+  margin-bottom: 0.75rem;
+}

@@ -1,0 +1,80 @@
+# Rendered with envsubst at container start:
+#   ASSETS_BUCKET_HOST  regional hostname of the artifact bucket, e.g.
+#                       govcloud-mfe-prod-assets.s3.us-gov-west-1.amazonaws.com
+#   DNS_RESOLVER        VPC DNS resolver (169.254.169.253)
+
+# S3 hostnames resolve to many, frequently rotating addresses. Using a variable in proxy_pass
+# with `resolver` makes nginx re-resolve at request time instead of pinning one IP at startup.
+resolver ${DNS_RESOLVER} valid=30s ipv6=off;
+resolver_timeout 5s;
+
+# Versioned assets never change, so they can be cached on local disk indefinitely. This keeps
+# most requests off S3 and there is never anything to invalidate.
+proxy_cache_path /var/cache/nginx/assets levels=1:2 keys_zone=assets:10m max_size=1g
+                 inactive=7d use_temp_path=off;
+
+server {
+  listen 8080;
+  server_name _;
+
+  set $s3_host ${ASSETS_BUCKET_HOST};
+
+  # ALB target health check. Health checks bypass the ALB's authenticate action, so this must
+  # not reveal anything.
+  location = /nginx-health {
+    access_log off;
+    default_type text/plain;
+    return 200 "ok\n";
+  }
+
+  # This is a read-only origin.
+  if ($request_method !~ ^(GET|HEAD)$) {
+    return 405;
+  }
+
+  # Immutable build output: /apps/<app>/<version>/<file>. The URI is forwarded to S3 as-is, so
+  # it is restricted to a safe character set; anything else falls through to the 404 below.
+  location ~ "^/apps/[a-z][a-z0-9]*/[A-Za-z0-9_-]+/[A-Za-z0-9._/-]+$" {
+    include /etc/nginx/snippets/s3-origin.conf;
+    proxy_pass https://$s3_host$uri;
+    error_page 403 404 = @not_found;
+
+    proxy_cache assets;
+    proxy_cache_key $uri;
+    proxy_cache_valid 200 7d;
+    proxy_cache_lock on;
+    proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    add_header X-Cache-Status $upstream_cache_status always;
+  }
+
+  # Plain prefix (not `^~`) so the regex above is still tried first.
+  location /apps/ {
+    return 404;
+  }
+
+  # Every other path is a client-side route, so it gets the shell's entry document. That object
+  # is the shell's "live version" pointer: promote/rollback replace it, and `no-cache` makes
+  # browsers revalidate it (cheaply, via ETag) on every load so they see a release immediately.
+  location / {
+    include /etc/nginx/snippets/s3-origin.conf;
+    proxy_pass https://$s3_host/index.html;
+    error_page 403 404 = @not_deployed;
+
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-cache" always;
+  }
+
+  # S3 answers 403 rather than 404 for a missing key when the caller can't list the bucket.
+  location @not_found {
+    default_type text/plain;
+    return 404 "Not found\n";
+  }
+
+  location @not_deployed {
+    default_type text/plain;
+    return 503 "The application has not been deployed yet\n";
+  }
+}

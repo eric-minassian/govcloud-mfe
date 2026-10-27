@@ -1,0 +1,37 @@
+{
+  "name": "@govcloud-mfe/shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "rsbuild dev",
+    "build": "rsbuild build",
+    "preview": "rsbuild preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@govcloud-mfe/contracts": "workspace:*",
+    "@govcloud-mfe/platform-sdk": "workspace:*",
+    "@govcloud-mfe/ui": "workspace:*",
+    "@tanstack/react-query": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "catalog:",
+    "@module-federation/enhanced": "catalog:",
+    "@tanstack/react-query-devtools": "catalog:"
+  },
+  "devDependencies": {
+    "@govcloud-mfe/mf-config": "workspace:*",
+    "@module-federation/rsbuild-plugin": "catalog:",
+    "@rsbuild/core": "catalog:",
+    "@rsbuild/plugin-react": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "jsdom": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

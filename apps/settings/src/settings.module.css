@@ -1,0 +1,39 @@
+.tabs {
+  display: flex;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--gm-border);
+}
+.tabs a {
+  padding-bottom: 0.5rem;
+  text-decoration: none;
+  color: var(--gm-muted);
+}
+.tabs a:global(.active) {
+  color: var(--gm-accent);
+  border-bottom: 2px solid var(--gm-accent);
+}
+
+.form {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 32rem;
+}
+.form fieldset {
+  border: 1px solid var(--gm-border);
+  border-radius: var(--gm-radius);
+}
+.form label {
+  display: block;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--gm-border);
+}

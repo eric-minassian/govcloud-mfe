@@ -1,0 +1,28 @@
+{
+  "name": "@govcloud-mfe/mf-config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Build-time helpers that keep Module Federation configuration identical across the shell and every remote.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@govcloud-mfe/contracts": "workspace:*"
+  },
+  "peerDependencies": {
+    "@module-federation/rsbuild-plugin": "catalog:",
+    "@rsbuild/core": "catalog:"
+  },
+  "devDependencies": {
+    "@module-federation/rsbuild-plugin": "catalog:",
+    "@rsbuild/core": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

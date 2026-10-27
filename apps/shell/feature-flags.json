@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "flags": {
+    "environmentBanner": {
+      "name": "Environment banner",
+      "description": "Show a banner with the deployment stage at the top of every page.",
+      "attributes": {
+        "message": { "constraints": { "type": "string", "required": true } }
+      }
+    }
+  },
+  "values": {
+    "environmentBanner": {
+      "enabled": true,
+      "message": "Proof of concept - not for production data"
+    }
+  }
+}

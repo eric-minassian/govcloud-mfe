@@ -1,0 +1,7 @@
+{
+  "name": "shell",
+  "kind": "shell",
+  "displayName": "Shell",
+  "owner": "team-platform",
+  "devPort": 3000
+}

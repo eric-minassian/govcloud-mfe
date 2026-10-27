@@ -1,0 +1,60 @@
+.shell-banner {
+  background: var(--gm-warning);
+  color: #1b1f24;
+  text-align: center;
+  font-size: 0.875rem;
+  padding: 0.25rem;
+}
+
+.shell-header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--gm-surface);
+  border-bottom: 1px solid var(--gm-border);
+}
+
+.shell-brand {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--gm-text);
+}
+
+.shell-nav {
+  display: flex;
+  gap: 1.25rem;
+  flex: 1;
+}
+.shell-nav a {
+  text-decoration: none;
+  color: var(--gm-muted);
+}
+.shell-nav a.active {
+  color: var(--gm-accent);
+  font-weight: 600;
+}
+
+.shell-user {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.875rem;
+}
+
+.shell-main {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.shell-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--gm-gap);
+  margin-bottom: var(--gm-gap);
+}
+
+.shell-muted {
+  color: var(--gm-muted);
+  font-size: 0.875rem;
+}

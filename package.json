@@ -1,0 +1,22 @@
+{
+  "name": "govcloud-mfe",
+  "private": true,
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=@govcloud-mfe/shell --filter=@govcloud-mfe/dashboard --filter=@govcloud-mfe/settings --filter=@govcloud-mfe/frontend-api",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "release": "pnpm --filter @govcloud-mfe/release-cli run cli"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
+  }
+}
