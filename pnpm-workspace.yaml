@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - modules/*
   - packages/*
   - services/*
   - tools/*
@@ -8,20 +9,17 @@ packages:
 allowBuilds:
   esbuild: true
 
-# One version of every shared dependency for the whole repo. This matters more
-# than usual for Module Federation: the shell provides singletons (react,
-# react-query, ...) at runtime, so remotes must be built against the same
-# major versions. Bumping a catalog entry is a platform-wide change.
+# One version of every dependency for the whole repo. Every module is compiled
+# into the same bundle, so there is only ever one copy of React, the router and
+# TanStack Query on the page; the catalog makes that explicit and reviewable.
 catalog:
-  # Runtime singletons shared across federated modules
+  # Provided by the app, declared by modules as peer dependencies
   react: ^19.3.1
   react-dom: ^19.3.1
   react-router: ^8.5.0
   "@tanstack/react-query": ^5.105.0
   "@tanstack/react-query-devtools": ^5.105.0
   # Build tooling
-  "@module-federation/enhanced": ^2.9.2
-  "@module-federation/rsbuild-plugin": ^2.9.2
   "@rsbuild/core": ^2.2.14
   "@rsbuild/plugin-react": ^2.1.1
   "@biomejs/biome": ^2.6.3

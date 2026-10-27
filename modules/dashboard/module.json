@@ -1,0 +1,6 @@
+{
+  "name": "dashboard",
+  "displayName": "Dashboard",
+  "route": "/dashboard",
+  "owner": "team-insights"
+}

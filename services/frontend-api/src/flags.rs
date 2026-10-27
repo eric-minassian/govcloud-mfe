@@ -1,10 +1,11 @@
-//! Feature flags, one AppConfig application per app (docs/contracts.md §5).
+//! Feature flags, one AppConfig application per app (docs/contracts.md §7).
 //!
 //! In AWS we read flags through the AppConfig Agent sidecar. The agent owns
 //! session management, polling and caching, and evaluates multi-variant flags
 //! against the caller context we pass in `Context` headers — so this service
 //! never calls the AppConfig APIs itself.
 
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -78,26 +79,40 @@ impl FlagProvider for AppConfigAgentFlags {
     }
 }
 
-/// Reads flag *definitions* straight from `apps/<app>/feature-flags.json`
-/// for local development, so there is a single source of truth.
+/// Reads flag *definitions* straight from the repository for local
+/// development, so the files the pipelines deploy are the single source of
+/// truth: `modules/<app>/feature-flags.json` for a team's module, and
+/// `apps/<app>/feature-flags.json` for the web app itself.
 pub struct LocalFlags {
-    dir: PathBuf,
+    repo_root: PathBuf,
 }
 
 impl LocalFlags {
-    pub fn new(dir: impl Into<PathBuf>) -> Self {
-        Self { dir: dir.into() }
+    pub fn new(repo_root: impl Into<PathBuf>) -> Self {
+        Self {
+            repo_root: repo_root.into(),
+        }
     }
 }
 
 #[async_trait]
 impl FlagProvider for LocalFlags {
     async fn flags_for(&self, app: &str, _user: &CurrentUser) -> anyhow::Result<FlagSet> {
-        let path = self.dir.join(app).join("feature-flags.json");
-        let bytes = tokio::fs::read(&path)
-            .await
-            .with_context(|| format!("reading {}", path.display()))?;
-        Ok(resolve_default_values(&serde_json::from_slice(&bytes)?))
+        for dir in ["modules", "apps"] {
+            let path = self
+                .repo_root
+                .join(dir)
+                .join(app)
+                .join("feature-flags.json");
+            match tokio::fs::read(&path).await {
+                Ok(bytes) => return Ok(resolve_default_values(&serde_json::from_slice(&bytes)?)),
+                Err(error) if error.kind() == ErrorKind::NotFound => continue,
+                Err(error) => {
+                    return Err(error).with_context(|| format!("reading {}", path.display()));
+                }
+            }
+        }
+        anyhow::bail!("no feature-flags.json for {app} in modules/ or apps/")
     }
 }
 
@@ -192,21 +207,42 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn reads_the_repository_flag_definitions() {
-        let provider = LocalFlags::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../apps"));
-        let user = CurrentUser {
+    fn repo_flags() -> LocalFlags {
+        LocalFlags::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+    }
+
+    fn user() -> CurrentUser {
+        CurrentUser {
             sub: "u".into(),
             email: None,
             name: None,
             groups: vec![],
-        };
-        let flags = provider.flags_for("dashboard", &user).await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn reads_a_modules_flags_from_modules_dir() {
+        let flags = repo_flags().flags_for("dashboard", &user()).await.unwrap();
         assert_eq!(flags["moduleEnabled"]["enabled"], json!(true));
         assert_eq!(
             flags["releaseTimeline"],
             json!({ "enabled": false, "_variant": "Default" })
         );
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_apps_dir_for_the_web_app() {
+        let flags = repo_flags().flags_for("web", &user()).await.unwrap();
+        assert_eq!(flags["environmentBanner"]["enabled"], json!(true));
+    }
+
+    #[tokio::test]
+    async fn unknown_apps_are_an_error() {
+        let error = repo_flags()
+            .flags_for("nosuchapp", &user())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("nosuchapp"));
     }
 
     #[test]

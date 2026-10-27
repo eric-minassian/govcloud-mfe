@@ -6,7 +6,6 @@ mod client_events;
 mod feature_flags;
 mod health;
 mod me;
-mod modules;
 mod preferences;
 
 use std::time::Duration;
@@ -31,7 +30,6 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/health", get(health::health))
         .route("/me", get(me::me))
-        .route("/modules", get(modules::list))
         .route("/feature-flags", get(feature_flags::get))
         .route("/preferences", get(preferences::get).put(preferences::put))
         .route(
@@ -69,16 +67,14 @@ mod tests {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
-    async fn local_app() -> Router {
-        let repo = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+    fn local_app() -> Router {
         let config = Config::from_lookup(|name| match name {
             "APP_ENV" => Some("local".into()),
-            "LOCAL_RELEASES_DIR" => Some(format!("{repo}/dev/releases")),
-            "LOCAL_FLAGS_DIR" => Some(format!("{repo}/apps")),
+            "LOCAL_REPO_ROOT" => Some(concat!(env!("CARGO_MANIFEST_DIR"), "/../..").into()),
             _ => None,
         })
         .unwrap();
-        router(AppState::from_config(&config).await.unwrap())
+        router(AppState::from_config(&config).unwrap())
     }
 
     async fn body_json(response: axum::response::Response) -> serde_json::Value {
@@ -87,18 +83,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn modules_lists_remotes_and_responses_are_not_cacheable() {
+    async fn feature_flags_cover_every_app_and_are_not_cacheable() {
         let response = local_app()
-            .await
-            .oneshot(Request::get("/api/modules").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::get("/api/feature-flags")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[CACHE_CONTROL], "no-store");
-        let registry = body_json(response).await;
-        assert_eq!(registry["shell"]["version"], "local");
-        assert_eq!(registry["modules"][0]["name"], "dashboard");
-        assert_eq!(registry["modules"][0]["exposedModule"], "./App");
+        let flags = body_json(response).await;
+        assert_eq!(flags["web"]["environmentBanner"]["enabled"], true);
+        assert_eq!(flags["dashboard"]["moduleEnabled"]["enabled"], true);
+        assert_eq!(flags["settings"]["moduleEnabled"]["enabled"], true);
+    }
+
+    #[tokio::test]
+    async fn there_is_no_module_registry() {
+        let response = local_app()
+            .oneshot(Request::get("/api/modules").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn client_events_are_accepted_for_known_apps() {
+        let request = Request::post("/api/client-events")
+            .header("content-type", "application/json")
+            .header("sec-fetch-site", "same-origin")
+            .body(Body::from(
+                r#"{"events":[{"type":"render-error","app":"evil","message":"x"}]}"#,
+            ))
+            .unwrap();
+        let response = local_app().oneshot(request).await.unwrap();
+        // Unknown apps are dropped silently; the batch itself is accepted.
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
     }
 
     #[tokio::test]
@@ -110,7 +132,7 @@ mod tests {
                 r#"{"theme":"dark","density":"compact","pinnedModules":[]}"#,
             ))
             .unwrap();
-        let response = local_app().await.oneshot(request).await.unwrap();
+        let response = local_app().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
@@ -123,7 +145,7 @@ mod tests {
                 r#"{"theme":"dark","density":"compact","pinnedModules":["dashboard"]}"#,
             ))
             .unwrap();
-        let response = local_app().await.oneshot(request).await.unwrap();
+        let response = local_app().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(body_json(response).await["pinnedModules"][0], "dashboard");
     }
@@ -131,7 +153,6 @@ mod tests {
     #[tokio::test]
     async fn logout_expires_every_session_cookie_shard() {
         let response = local_app()
-            .await
             .oneshot(
                 Request::get("/api/auth/logout")
                     .body(Body::empty())

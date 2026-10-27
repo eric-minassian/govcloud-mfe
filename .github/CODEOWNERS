@@ -1,0 +1,13 @@
+# Ownership is enforced, not just documented: `pnpm check:ownership` fails if a module's
+# module.json `owner` doesn't match its entry here. "@example-agency" is a placeholder org.
+
+# Platform team owns everything by default: the app shell, shared packages, services, infra.
+*                               @example-agency/team-platform
+
+# Each module is owned by one team. Their review is required for any change inside it,
+# including platform-wide refactors that touch their code.
+/modules/dashboard/             @example-agency/team-insights
+/modules/settings/              @example-agency/team-accounts
+
+# Adding, removing or re-routing a module is a platform decision.
+/apps/web/src/modules.ts        @example-agency/team-platform

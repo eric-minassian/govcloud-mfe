@@ -1,21 +1,21 @@
+import { activate } from './activate';
 import type { ReleaseContext } from './context';
-import { activate } from './promote';
+import { describeChanges } from './describe-changes';
 import { releaseHistory } from './release-history';
 
-/** How far back `rollback` looks for a version to return to. */
+/** How far back `rollback` looks for a release to return to. */
 const HISTORY_DEPTH = 25;
 
 /**
- * Re-activates a previous release. Nothing is rebuilt or re-uploaded — the old version's files
- * are still in its immutable prefix — so this takes seconds.
+ * Re-activates a previous release in seconds; its build is still in S3.
+ *
+ * With build-time composition a rollback is all-or-nothing: it reverts *every* module to the
+ * target release's revision. It prints which teams' changes it undoes, so they can be told. To
+ * take back one module's change and keep everyone else's, revert that change in git (the delivery
+ * pipeline ships the revert), or turn the module's feature flag or kill switch off.
  *
  * Without `toVersion`, rolls back to the most recent release with a different version than the
- * live one. Note that straight after a rollback, that is the version you just rolled back *from*;
- * use `release status` and `--to` when in doubt.
- *
- * This is the break-glass path. Normally rollback happens in the pipeline (see
- * docs/runbooks/deploy-and-rollback.md); after using this, pause the pipeline's prod transition
- * so the next run doesn't re-release the bad version.
+ * live one. After using this, pause the pipeline's prod transition until the fix is merged.
  */
 export async function rollback(
   ctx: ReleaseContext,
@@ -23,7 +23,7 @@ export async function rollback(
 ): Promise<void> {
   const history = await releaseHistory(ctx, HISTORY_DEPTH);
   const live = history.find((entry) => entry.isLive);
-  if (!live) throw new Error(`${ctx.app} has no live release in ${ctx.stage}`);
+  if (!live) throw new Error(`Nothing is live in ${ctx.stage}`);
 
   const target = options.toVersion
     ? history.find((entry) => entry.record.version === options.toVersion)
@@ -32,8 +32,8 @@ export async function rollback(
   if (!target) {
     throw new Error(
       options.toVersion
-        ? `${options.toVersion} is not among the last ${HISTORY_DEPTH} releases of ${ctx.app}`
-        : `${ctx.app} has no earlier release to roll back to`,
+        ? `${options.toVersion} is not among the last ${HISTORY_DEPTH} releases`
+        : `There is no earlier release to roll back to`,
     );
   }
   if (target.record.version === live.record.version) {
@@ -42,6 +42,7 @@ export async function rollback(
   }
 
   ctx.log(`Rolling back ${live.record.version} → ${target.record.version}`);
+  ctx.log(`Reverts: ${describeChanges(live.record.modules, target.record.modules)}`);
   await activate(ctx, {
     ...target.record,
     releasedAt: new Date().toISOString(),

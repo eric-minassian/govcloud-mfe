@@ -12,7 +12,7 @@ browser ──HTTPS──▶ ALB (authenticate-oidc) ──▶ nginx (ECS Fargat
 
 | Request                              | Served from               | Cache-Control                         |
 | ------------------------------------ | ------------------------- | ------------------------------------- |
-| `/apps/<app>/<version>/<file>`       | same key in S3            | `public, max-age=31536000, immutable` |
+| `/builds/<version>/<file>`           | same key in S3            | `public, max-age=31536000, immutable` |
 | anything else (client-side routes)   | `index.html` in S3        | `no-cache` (revalidated via ETag)     |
 | `/nginx-health`                      | nginx                     | —                                     |
 
@@ -21,15 +21,15 @@ browser ──HTTPS──▶ ALB (authenticate-oidc) ──▶ nginx (ECS Fargat
 ## Design notes
 
 - **No request signing.** nginx makes anonymous requests. The bucket policy only allows
-  anonymous `s3:GetObject` on `apps/*` and `index.html` when the request comes through the VPC's
+  anonymous `s3:GetObject` on `builds/*` and `index.html` when the request comes through the VPC's
   S3 gateway endpoint (`aws:SourceVpce`). That is also why the bucket uses SSE-S3: anonymous
   requests can't decrypt SSE-KMS objects. If you need SSE-KMS, swap this image for one that
   signs requests with the task role (for example the NGINX S3 Gateway project).
 - **Nothing user-specific reaches S3.** Cookies and the ALB's `x-amzn-oidc-*` headers are
   stripped before proxying.
-- **Local disk cache.** Versioned assets never change, so nginx caches them on local disk.
+- **Local disk cache.** Builds never change, so nginx caches their files on local disk.
   Nothing ever needs invalidating.
-- **Strict CSP.** Every script, including every remote module, comes from this origin, so the
+- **Strict CSP.** Every script, including every module's chunk, comes from this origin, so the
   Content-Security-Policy can be `script-src 'self'` with no exceptions.
 - **Read-only root filesystem.** nginx runs as the image's unprivileged user and only writes to
   `/tmp` and `/var/cache/nginx`. The task definition must mount both as writable volumes

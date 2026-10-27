@@ -39,8 +39,8 @@ describe('apiFetch', () => {
   it('surfaces other failures as ApiError with the status code', async () => {
     mockFetch({ ok: false, status: 503 });
 
-    await expect(apiFetch('/api/modules')).rejects.toMatchObject(
-      new ApiError(503, 'GET /api/modules failed: 503'),
+    await expect(apiFetch('/api/preferences')).rejects.toMatchObject(
+      new ApiError(503, 'GET /api/preferences failed: 503'),
     );
   });
 });

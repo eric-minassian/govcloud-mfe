@@ -9,16 +9,14 @@ export interface ReleaseHistoryEntry {
 }
 
 /**
- * Past releases of the app, newest first.
- *
- * There is no separate history store: the bucket is versioned, so every write of
- * `releases/<app>.json` is kept as an object version. The history is whatever S3 already has.
+ * Past releases, newest first. There is no separate history store: the bucket is versioned, so
+ * every write of `releases/web.json` is kept as an object version.
  */
 export async function releaseHistory(
   ctx: ReleaseContext,
   limit: number,
 ): Promise<ReleaseHistoryEntry[]> {
-  const key = bucketLayout.releaseRecord(ctx.app);
+  const key = bucketLayout.releaseRecord;
   const { Versions = [] } = await ctx.s3.send(
     new ListObjectVersionsCommand({ Bucket: ctx.bucket, Prefix: key }),
   );

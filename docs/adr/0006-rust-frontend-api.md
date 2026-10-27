@@ -1,33 +1,33 @@
-# 0006 — A Rust same-origin API for frontend-only concerns
+# 0006 — A smaller Rust frontend API
 
 **Status:** accepted
 
 ## Context
 
-The frontend needs a few server-side capabilities that belong to no domain backend: who the user
-is, which modules are live, which flags are on, UI preferences, and a sink for client
-telemetry. These must be same-origin (behind the same ALB auth) and fast.
+On `main`, the frontend API also serves the module registry: it reads release records from S3
+so the shell can discover remotes at runtime. With build-time composition, which modules exist
+is decided by the compiler.
 
 ## Decision
 
-A small Rust service (`services/frontend-api`, axum) on `/api/*`:
+The Rust service (`services/frontend-api`, axum) keeps only the frontend concerns that need a
+server:
 
 | Endpoint              | Why it lives here                                              |
 | --------------------- | -------------------------------------------------------------- |
 | `/api/me`             | Verifies the ALB's signed identity header (ES256, GovCloud key endpoint, signer check) |
-| `/api/modules`        | Combines release records (S3) with kill-switch flags          |
-| `/api/feature-flags`  | Server-side evaluation through the AppConfig Agent, with user context |
+| `/api/feature-flags`  | Evaluates flags server-side through the AppConfig Agent, with user context, for every app in `APPS` |
 | `/api/preferences`    | UI-only user data                                              |
-| `/api/client-events`  | Turns client failures into CloudWatch metrics (EMF), which drive rollbacks |
-| `/api/auth/logout`    | Clears ALB session cookies and redirects to the IdP           |
+| `/api/client-events`  | Turns client failures into per-module CloudWatch metrics (EMF), which drive rollbacks |
+| `/api/auth/logout`    | Clears ALB session cookies and redirects to the IdP            |
 
-Domain data (cases, records and so on) does **not** belong here. It belongs in domain services,
-which the frontend reaches through their own ALB rules.
+`APPS` (`web,dashboard,settings`) is set by the platform stack from the discovered modules. It
+bounds which AppConfig applications are read and which metric dimensions can be created.
 
 ## Consequences
 
-- A small, memory-safe, low-latency binary on a distroless image with a fast cold start.
-- The service is stateless except for the in-memory preferences store, which is a POC
-  stand-in for DynamoDB.
-- Its endpoints are a contract with independently deployed frontends, documented in
-  `docs/contracts.md` and mirrored in `packages/contracts`.
+- The service has no AWS SDK and no IAM permissions beyond AppConfig reads. Its task role
+  can't touch the artifact bucket.
+- Adding a module means redeploying the platform stack so `APPS` includes it. Adding a module is
+  already a platform change (the composition list), so this adds no new coordination.
+- Domain data still belongs in domain services, not here.

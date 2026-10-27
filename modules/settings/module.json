@@ -1,0 +1,6 @@
+{
+  "name": "settings",
+  "displayName": "Settings",
+  "route": "/settings",
+  "owner": "team-accounts"
+}

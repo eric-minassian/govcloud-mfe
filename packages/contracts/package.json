@@ -2,7 +2,7 @@
   "name": "@govcloud-mfe/contracts",
   "version": "0.1.0",
   "private": true,
-  "description": "Types shared by the shell, remotes, release tooling and infrastructure. See docs/contracts.md.",
+  "description": "Types shared by the app, modules, release tooling, frontend API and infrastructure. See docs/contracts.md.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

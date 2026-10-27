@@ -16,7 +16,7 @@ pub enum AppError {
     /// The client sent something we reject; the message is safe to return.
     #[error("bad request: {0}")]
     BadRequest(String),
-    /// A dependency (S3, AppConfig, ...) failed.
+    /// A dependency (AppConfig Agent, preferences store, ...) failed.
     #[error("dependency failure: {0:#}")]
     Dependency(anyhow::Error),
 }

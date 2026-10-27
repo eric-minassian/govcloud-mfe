@@ -1,9 +1,0 @@
-{
-  "name": "dashboard",
-  "kind": "remote",
-  "displayName": "Dashboard",
-  "route": "/dashboard",
-  "exposedModule": "./App",
-  "owner": "team-insights",
-  "devPort": 3001
-}

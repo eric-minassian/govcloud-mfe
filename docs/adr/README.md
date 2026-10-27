@@ -1,10 +1,10 @@
-# Architecture decision records
+# Architecture decision records (build-time variant)
 
 | #    | Decision                                                                 |
 | ---- | ------------------------------------------------------------------------ |
-| 0001 | [Runtime composition with immutable artifacts and pointer releases](0001-runtime-composition-and-pointer-releases.md) |
+| 0001 | [Compose modules at build time, from source, in one repository](0001-build-time-composition.md) |
 | 0002 | [Authenticate at the ALB, serve assets through nginx from private S3](0002-alb-oidc-and-nginx-s3-origin.md) |
-| 0003 | [One AppConfig application per micro-frontend](0003-appconfig-application-per-app.md) |
-| 0004 | [One CodePipeline per app with alarm-gated stage rollback](0004-per-app-pipelines.md) |
-| 0005 | [Shared singletons and one query cache](0005-shared-singletons-and-query-cache.md) |
-| 0006 | [A Rust same-origin API for frontend-only concerns](0006-rust-frontend-api.md) |
+| 0003 | [Enforce module ownership with tooling, not convention](0003-enforced-module-ownership.md) |
+| 0004 | [One delivery train, plus checks and flags pipelines per team](0004-delivery-train-and-team-pipelines.md) |
+| 0005 | [Feature flags are each team's release and rollback mechanism](0005-feature-flags-as-the-release-mechanism.md) |
+| 0006 | [A smaller Rust frontend API](0006-rust-frontend-api.md) |

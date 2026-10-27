@@ -1,66 +1,78 @@
-# GovCloud MFE
+# GovCloud MFE: build-time composition
 
-A proof of concept for an **AWS GovCloud-native micro-frontend platform**. It is meant to be
-read rather than deployed. It shows how to:
+> **Branch `build-time-composition`.** This is the same product, platform and team structure as
+> `main`, but modules are composed when the app is **built** instead of at runtime with Module
+> Federation. Read [the comparison](docs/comparison-with-module-federation.md) first.
 
-- compose a React **shell** and independently built **remote modules** with
-  **Module Federation 2.0** (Rsbuild/Rspack),
+A proof of concept for an **AWS GovCloud-native frontend where different teams own different
+modules, compiled into one application**. It is meant to be read rather than deployed. It shows
+how to:
+
+- give each team a module it owns (`modules/<name>/`), with ownership **enforced** by
+  CODEOWNERS, Turborepo boundaries, package exports and an ownership check,
+- compose those modules into one React app at build time, each lazily loaded in its own chunk,
+  with the compiler checking every contract between teams,
 - authenticate **every** request, including JS and CSS, with an **ALB `authenticate-oidc`**
-  action, because GovCloud has no CloudFront,
-- serve assets through **nginx from a private S3 bucket**,
-- run a small **Rust same-origin API** for frontend-only concerns (identity, module registry,
-  feature flags, preferences, telemetry),
-- give **each module its own pipeline**, so it deploys and **rolls back on its own**,
-- use **AWS AppConfig** feature flags, with one AppConfig application per module,
-- share server state across modules with **TanStack Query**,
+  action, since GovCloud has no CloudFront,
+- serve the build through **nginx from a private S3 bucket**,
+- run a small **Rust same-origin API** for identity, feature flags, preferences and telemetry,
+- give each team **its own pipelines**: a PR gate that builds the composed app, and a flags
+  pipeline that releases features on the team's own schedule,
+- ship code on one **delivery train** that bakes against every module's alarm and rolls back on
+  its own,
+- use **AWS AppConfig** feature flags (one application per module) as each team's release and
+  rollback lever, with typed flag hooks,
+- share server state with **TanStack Query**,
 - define all of it with **AWS CDK**.
 
 ```mermaid
 flowchart LR
-  B([Browser]) --> ALB[ALB<br/>authenticate-oidc]
-  ALB -- "/*" --> N[nginx] --> S3[(S3<br/>immutable versions<br/>+ release pointers)]
-  ALB -- "/api/*" --> API[frontend-api<br/>Rust] --> S3
-  API --> AC[AppConfig Agent] --> APPCFG[(AppConfig<br/>per-app flags)]
-  P1[[shell pipeline]] & P2[[dashboard pipeline]] & P3[[settings pipeline]] -. publish + promote .-> S3
+  subgraph repo [One repository]
+    M1[modules/dashboard<br/>team-insights] --> W[apps/web<br/>composition list]
+    M2[modules/settings<br/>team-accounts] --> W
+    P[packages/*<br/>platform] --> W
+  end
+  W -- "delivery train: one build" --> S3[(S3<br/>builds/version<br/>index.html)]
+  M1 -. "team's flags pipeline" .-> AC1[(AppConfig<br/>govcloud-mfe-dashboard)]
+  M2 -. "team's flags pipeline" .-> AC2[(AppConfig<br/>govcloud-mfe-settings)]
+  B([Browser]) --> ALB[ALB<br/>authenticate-oidc] --> N[nginx] --> S3
+  ALB -- "/api/*" --> API[frontend-api<br/>Rust] --> AG[AppConfig Agent] --> AC1 & AC2
 ```
 
 ## How it fits together
 
-1. **Build once.** Each app is built against the path its files will be served from,
-   `/apps/<app>/<version>/`, and uploaded there once. Nothing under a version prefix ever changes.
-2. **Release with a pointer.** Making a version live means one S3 write: `releases/<app>.json`
-   for a remote, `index.html` for the shell. Rolling back writes the previous value. No rebuild,
-   no cache invalidation, and other modules aren't affected.
-3. **Discover at runtime.** The shell has no build-time remotes. It asks `/api/modules` what's
-   live (minus any module whose AppConfig kill switch is off) and loads each remote's
-   `mf-manifest.json` through the Module Federation runtime.
-4. **Roll back automatically.** The shell reports remote load and render failures. The API
-   turns them into a per-module CloudWatch metric, and each module's alarm gates its pipeline's
-   prod stage (CodePipeline stage rollback) and its AppConfig flag deployments.
+1. **Teams own modules, and the repo enforces it.** A module is a package exporting
+   `defineModule({ name, route, owner, component: lazy(...) })`. It may only depend on platform
+   packages. Changes to it need its team's review.
+2. **The app composes at build time.** `apps/web/src/modules.ts` lists the modules. The build
+   compiles everything into one bundle, gives each module its own chunk, and records a content
+   revision per module in `composition.json`.
+3. **One train ships code.** Every merge builds once and goes dev → approval → prod. The prod bake
+   watches every module's alarm, and the pipeline rolls the release back if any of them fires,
+   naming the module and team.
+4. **Teams release with flags.** Code ships dark. Each team turns features (and, if needed, its
+   whole module) on and off through its own AppConfig application, deployed by its own pipeline.
+   AppConfig reverts a flag rollout automatically if the module's alarm fires.
 
 Read [docs/architecture.md](docs/architecture.md) for the full picture,
-[docs/contracts.md](docs/contracts.md) for the interfaces between independently deployed parts,
-and [docs/adr](docs/adr) for the reasoning behind each decision.
+[docs/contracts.md](docs/contracts.md) for the interfaces the compiler can't check, and
+[docs/adr](docs/adr) for the reasoning behind each decision.
 
 ## Repository layout
 
-| Path                     | What                                                                    |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `apps/shell`             | Host app: layout, navigation, runtime remote loading, error isolation  |
-| `apps/dashboard`         | Remote: TanStack Query polling, a multi-variant feature flag           |
-| `apps/settings`          | Remote: preferences with an optimistic mutation, flag inspector         |
-| `packages/contracts`     | Types shared across deployables (release record, API DTOs, descriptor)  |
-| `packages/platform-sdk`  | Runtime SDK: `apiFetch`, `platformQueries`, `useFeatureFlag`, telemetry |
-| `packages/mf-config`     | Build-time Module Federation "golden path" every app uses               |
-| `packages/ui`            | Design tokens and a few components                                      |
-| `services/edge-nginx`    | Authenticated static origin: nginx → S3 via a VPC gateway endpoint      |
-| `services/frontend-api`  | Rust (axum) same-origin API                                             |
-| `tools/release`          | `release deploy / rollback / status` CLI used by pipelines and humans   |
-| `infra`                  | CDK: platform stack, per-app stacks, per-app pipelines                  |
-| `docs`                   | Architecture, contracts, ADRs, runbook, GovCloud notes                  |
-
-Each app is described by `apps/<app>/microfrontend.json`. The build, the CDK app and the release
-CLI all read it, so adding a module means adding a folder.
+| Path                     | Owner          | What                                                          |
+| ------------------------ | -------------- | ------------------------------------------------------------- |
+| `apps/web`               | team-platform  | The app: layout, routing, composition list, module isolation  |
+| `modules/dashboard`      | team-insights  | Module: TanStack Query polling, a multi-variant feature flag  |
+| `modules/settings`       | team-accounts  | Module: preferences with an optimistic mutation, flag inspector |
+| `packages/contracts`     | team-platform  | Types shared with tooling and infra (descriptor, release record, API) |
+| `packages/platform-sdk`  | team-platform  | `defineModule`, `createModuleFlags`, `platformQueries`, telemetry, `/testing` |
+| `packages/ui`            | team-platform  | Design tokens and a few components                            |
+| `services/edge-nginx`    | team-platform  | Authenticated static origin: nginx → S3 via a VPC gateway endpoint |
+| `services/frontend-api`  | team-platform  | Rust (axum) same-origin API                                   |
+| `tools/release`          | team-platform  | `release deploy / rollback / status` CLI                      |
+| `tools/ownership`        | team-platform  | Checks that CODEOWNERS, `module.json` and the composition agree |
+| `infra`                  | team-platform  | CDK: platform, web and module stacks; delivery, checks and flags pipelines |
 
 ## Running locally
 
@@ -71,40 +83,28 @@ pnpm install
 pnpm dev
 ```
 
-This starts the shell on <http://localhost:3000>, the remotes on :3001 and :3002, and the
-frontend API on :8080 with `APP_ENV=local`. Locally the API:
-
-- signs you in as a fixed development user (it refuses to do this unless `APP_ENV=local`),
-- reads release records from [`dev/releases`](dev/releases), which point at the remotes' dev
-  servers,
-- reads flags straight from each app's `feature-flags.json`.
-
-A remote can also be developed on its own: `pnpm --filter @govcloud-mfe/dashboard dev` and open
-<http://localhost:3001>.
+This starts the app on <http://localhost:3000> and the frontend API on :8080 with
+`APP_ENV=local`. Locally the API signs you in as a fixed development user (it refuses to unless
+`APP_ENV=local`) and reads flags straight from each `feature-flags.json`. There is one dev server
+for everything. Module teams test in isolation with `renderWithPlatform` from
+`@govcloud-mfe/platform-sdk/testing`.
 
 ## Checks
 
 ```sh
-pnpm lint         # Biome
+pnpm lint         # Biome + turbo boundaries + ownership check
 pnpm typecheck    # TypeScript, every package
-pnpm test         # Vitest (SDK, mf-config, release CLI, CDK assertions) + cargo test
-pnpm build        # production builds (set RELEASE_VERSION to mimic CI)
+pnpm test         # Vitest (modules, SDK, app, release CLI, CDK assertions) + cargo test
+pnpm build        # production build (set RELEASE_VERSION to mimic CI)
 pnpm --filter @govcloud-mfe/infra synth
 ```
 
-## Deploying and rolling back
+## Shipping and rolling back
 
-See the [runbook](docs/runbooks/deploy-and-rollback.md). In short: every app's pipeline builds once,
-deploys to dev, waits for approval, deploys to prod and bakes against the app's alarm, rolling
-back automatically on failure. For break-glass, run
-`pnpm release rollback --app <app> --stage prod`.
+See the [runbook](docs/runbooks/deploy-and-rollback.md). In short: the fastest fix for one team's
+problem is its own flag or kill switch (seconds, and automatic on alarm). The fastest fix for a
+broken release is a whole-app rollback (seconds). Taking back one team's code while keeping
+everyone else's is a `git revert` that the train ships.
 
-GovCloud-specific gotchas (ALB key endpoints, CodeConnections region, image mirroring, FIPS)
-are collected in [docs/govcloud.md](docs/govcloud.md).
-
-## What's deliberately out of scope
-
-- Domain APIs. The frontend API only covers frontend concerns ([ADR 0006](docs/adr/0006-rust-frontend-api.md)).
-- Durable preferences storage (in-memory here, DynamoDB in production).
-- Retention of old versions (keep the last N per app, never the live one).
-- A self-mutating platform pipeline. The platform and pipeline stacks are deployed with `cdk deploy`.
+GovCloud-specific notes, including why there's no package registry (CodeArtifact isn't available
+in GovCloud), are in [docs/govcloud.md](docs/govcloud.md).

@@ -7,21 +7,6 @@ export interface CurrentUser {
   groups: string[];
 }
 
-export interface RemoteModule {
-  name: string;
-  displayName: string;
-  route: string;
-  /** URL of the module's `mf-manifest.json`. */
-  entry: string;
-  exposedModule: string;
-  version: string;
-}
-
-export interface ModuleRegistry {
-  shell: { version: string } | null;
-  modules: RemoteModule[];
-}
-
 /** Evaluated AppConfig feature flag: `enabled` plus any attributes defined on the flag. */
 export interface FeatureFlagValue {
   enabled: boolean;
@@ -46,8 +31,8 @@ export interface ClientEvent {
   message: string;
 }
 
-/** Props the shell passes to every remote's root component. */
-export interface MicroFrontendProps {
-  /** Absolute path the module is mounted at, e.g. `/dashboard`. Build links relative to it. */
+/** Props the app passes to every module's root component. */
+export interface ModuleProps {
+  /** Absolute path the module is mounted at, e.g. `/dashboard`. */
   basePath: string;
 }

@@ -1,9 +1,0 @@
-{
-  "name": "settings",
-  "kind": "remote",
-  "displayName": "Settings",
-  "route": "/settings",
-  "exposedModule": "./App",
-  "owner": "team-accounts",
-  "devPort": 3002
-}

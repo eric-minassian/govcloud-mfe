@@ -4,8 +4,9 @@ const reported = new Set<string>();
 
 /**
  * Reports a client-side failure to the frontend API, which turns it into the `ClientErrors`
- * CloudWatch metric for the app. That metric's alarm is what the pipeline watches after a deploy
- * and what AppConfig watches during a flag rollout — so a bad release rolls itself back.
+ * CloudWatch metric for the module (or `web`). The delivery pipeline's bake watches every
+ * module's alarm, and each module's alarm guards its own flag rollouts, so a bad release or a bad
+ * flag rolls itself back and the alarm name says whose module it was.
  *
  * Fire-and-forget: telemetry must never break the page. Duplicate events are sent once per page
  * load so a render loop can't flood the metric.

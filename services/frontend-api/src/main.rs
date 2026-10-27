@@ -1,8 +1,9 @@
-//! Same-origin "frontend API" for the micro-frontend platform.
+//! Same-origin "frontend API" for the web app.
 //!
 //! Runs behind the ALB on `/api/*`, next to nginx serving the static assets.
-//! It owns the APIs only the UI needs: who the user is, which modules are
-//! deployed, feature flags, UI preferences and client error telemetry.
+//! It owns the APIs only the UI needs: who the user is, feature flags, UI
+//! preferences and client error telemetry. Which modules exist is decided
+//! when the web app is built, so there is no module registry here.
 
 mod auth;
 mod config;
@@ -11,7 +12,6 @@ mod flags;
 mod metrics;
 mod model;
 mod preferences;
-mod releases;
 mod routes;
 mod state;
 
@@ -27,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     init_tracing(config.app_env);
 
-    let state = AppState::from_config(&config).await?;
+    let state = AppState::from_config(&config)?;
     let app = routes::router(state);
 
     let listener = TcpListener::bind(("0.0.0.0", config.port)).await?;

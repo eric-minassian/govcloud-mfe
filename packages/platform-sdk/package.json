@@ -2,10 +2,11 @@
   "name": "@govcloud-mfe/platform-sdk",
   "version": "0.1.0",
   "private": true,
-  "description": "Runtime SDK the shell and every remote use to talk to the platform: API client, current user, feature flags, telemetry. Shared as a Module Federation singleton.",
+  "description": "Everything a module needs from the platform: API client, typed feature flags, shared queries, telemetry and defineModule. Test helpers under ./testing.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -16,7 +17,9 @@
   },
   "peerDependencies": {
     "@tanstack/react-query": "catalog:",
-    "react": "catalog:"
+    "@testing-library/react": "catalog:",
+    "react": "catalog:",
+    "react-router": "catalog:"
   },
   "devDependencies": {
     "@tanstack/react-query": "catalog:",
@@ -25,7 +28,16 @@
     "jsdom": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-router": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@testing-library/react": {
+      "optional": true
+    },
+    "react-router": {
+      "optional": true
+    }
   }
 }

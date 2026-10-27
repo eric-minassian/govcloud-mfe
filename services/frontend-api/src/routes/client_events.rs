@@ -1,9 +1,8 @@
 //! `POST /api/client-events` — errors reported by the browser.
 //!
-//! The shell reports remote-load failures and render errors here; each one
-//! becomes a `ClientErrors` metric data point for the app that failed.
-
-use std::collections::HashSet;
+//! The web app's per-module error boundaries report chunk-load failures and
+//! render errors here; each one becomes a `ClientErrors` metric data point
+//! for the module (or `web`) that failed.
 
 use axum::Json;
 use axum::extract::State;
@@ -22,22 +21,19 @@ pub async fn post(
     _user: CurrentUser,
     Json(batch): Json<ClientEventBatch>,
 ) -> Result<StatusCode, AppError> {
-    let records = state.releases.list().await.map_err(AppError::dependency)?;
-    let known_apps: HashSet<String> = records.into_iter().map(|r| r.app).collect();
-
-    for event in accept_events(batch, &known_apps)? {
+    for event in accept_events(batch, &state.apps)? {
         state.metrics.record_client_error(&event);
     }
     Ok(StatusCode::ACCEPTED)
 }
 
 /// Applies the limits that keep this endpoint from being abused: batch size,
-/// message length, and — most importantly — only apps that are actually
-/// deployed, since `App` is a metric dimension and every new value is a new
-/// (billed) CloudWatch metric.
+/// message length, and — most importantly — only apps listed in `APPS`, since
+/// `App` is a metric dimension and every new value is a new (billed)
+/// CloudWatch metric.
 pub fn accept_events(
     batch: ClientEventBatch,
-    known_apps: &HashSet<String>,
+    known_apps: &[String],
 ) -> Result<Vec<ClientEvent>, AppError> {
     if batch.events.len() > MAX_EVENTS_PER_BATCH {
         return Err(AppError::BadRequest(format!(
@@ -70,8 +66,8 @@ mod tests {
         }
     }
 
-    fn known() -> HashSet<String> {
-        ["shell", "dashboard"].map(String::from).into()
+    fn known() -> Vec<String> {
+        ["web", "dashboard"].map(String::from).into()
     }
 
     #[test]

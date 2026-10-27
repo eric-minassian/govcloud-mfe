@@ -6,28 +6,24 @@ import { Construct } from 'constructs';
 import { naming } from '../naming';
 
 export interface ReleaseRoleProps {
-  readonly appName: string;
-  readonly kind: 'shell' | 'remote';
   readonly stageName: string;
   readonly toolingAccount: string;
-  /** Watched by the pipeline's bake step. */
-  readonly alarmArn: string;
 }
 
 /**
- * The only identity allowed to change what's live for one app in one stage. The pipeline assumes
- * it to run the release CLI (publish, promote, rollback) and to watch the app's alarm while baking.
- * It can't touch other apps' files, so a broken pipeline can only break its own app.
+ * The only identity allowed to change what's live in one stage. The delivery pipeline assumes it to
+ * run the release CLI (publish, promote, rollback) and to watch every app's alarm while baking.
+ * Modules have no equivalent: their code only reaches users inside a composed build.
  */
 export class ReleaseRole extends Construct {
   readonly role: iam.Role;
 
   constructor(scope: Construct, id: string, props: ReleaseRoleProps) {
     super(scope, id);
-    const { appName, stageName } = props;
+    const { stageName } = props;
 
     // Resolved at deploy time from the parameter the platform stack publishes. No cross-stack
-    // export means the platform and each app can be deployed independently.
+    // export, so the platform and the web stack deploy independently.
     const bucketParameterName = naming.assetsBucketParameter(stageName);
     const bucket = s3.Bucket.fromBucketName(
       this,
@@ -35,29 +31,23 @@ export class ReleaseRole extends Construct {
       ssm.StringParameter.valueForStringParameter(this, bucketParameterName),
     );
 
-    const pipelineDeployRoleArn = `arn:${Aws.PARTITION}:iam::${props.toolingAccount}:role/${naming.pipelineDeployRole(appName)}`;
+    const deployRoleArn = `arn:${Aws.PARTITION}:iam::${props.toolingAccount}:role/${naming.deliveryDeployRole}`;
     this.role = new iam.Role(this, 'Role', {
-      roleName: naming.releaseRole(appName, stageName),
-      description: `Publishes and promotes ${appName} releases in ${stageName}`,
+      roleName: naming.releaseRole(stageName),
+      description: `Publishes, promotes and bakes web releases in ${stageName}`,
       // Trust the tooling account and require the exact role ARN in a condition. Unlike a role-ARN
       // principal, this doesn't need the role to exist first and still works after it is recreated.
       assumedBy: new iam.AccountPrincipal(props.toolingAccount).withConditions({
-        ArnEquals: { 'aws:PrincipalArn': pipelineDeployRoleArn },
+        ArnEquals: { 'aws:PrincipalArn': deployRoleArn },
       }),
     });
 
-    const releaseRecord = `releases/${appName}.json`;
-    const ownObjects = [bucket.arnForObjects(`apps/${appName}/*`)];
-    if (props.kind === 'shell') {
-      // The shell's promote step also copies its index.html to the bucket root, where nginx serves it.
-      ownObjects.push(bucket.arnForObjects('index.html'));
-    }
-
+    const releaseRecord = 'releases/web.json';
     this.role.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'PublishOwnBuilds',
+        sid: 'PublishBuildsAndSwapEntryDocument',
         actions: ['s3:PutObject', 's3:GetObject'],
-        resources: ownObjects,
+        resources: [bucket.arnForObjects('builds/*'), bucket.arnForObjects('index.html')],
       }),
     );
     this.role.addToPolicy(
@@ -69,17 +59,20 @@ export class ReleaseRole extends Construct {
     );
     this.role.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'ListOwnPrefixesAndReleaseHistory',
+        sid: 'ListBuildsAndReleaseHistory',
         actions: ['s3:ListBucket', 's3:ListBucketVersions'],
         resources: [bucket.bucketArn],
-        conditions: { StringLike: { 's3:prefix': [`apps/${appName}/*`, releaseRecord] } },
+        conditions: { StringLike: { 's3:prefix': ['builds/*', releaseRecord] } },
       }),
     );
     this.role.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'WatchAlarmWhileBaking',
+        sid: 'WatchEveryAlarmWhileBaking',
         actions: ['cloudwatch:DescribeAlarms'],
-        resources: [props.alarmArn],
+        // The web alarm and every module's alarm in this stage: a release contains all of them.
+        resources: [
+          `arn:${Aws.PARTITION}:cloudwatch:${Aws.REGION}:${Aws.ACCOUNT_ID}:alarm:${naming.clientErrorsAlarm('*', stageName)}`,
+        ],
       }),
     );
     ssm.StringParameter.fromStringParameterName(

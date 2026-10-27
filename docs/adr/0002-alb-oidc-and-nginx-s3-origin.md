@@ -16,7 +16,7 @@ so there are no signed cookies, no Lambda@Edge and no origin access control.
   - default → nginx, `OnUnauthenticatedRequest: authenticate`.
   - `/signed-out` → unauthenticated fixed response, which ALB logout requires.
 - **nginx on Fargate** proxies to S3 with **unsigned** requests through the VPC's **S3 gateway
-  endpoint**. The bucket policy allows anonymous `GetObject` on `apps/*` and `index.html`
+  endpoint**. The bucket policy allows anonymous `GetObject` on `builds/*` and `index.html`
   only with `aws:SourceVpce` set to that endpoint. Block Public Access stays fully on, because
   policies conditioned on a fixed VPC endpoint are not considered public.
 - The bucket uses **SSE-S3**, because anonymous requests can't use KMS keys.
@@ -29,7 +29,7 @@ so there are no signed cookies, no Lambda@Edge and no origin access control.
   CORS is needed.
 - nginx adds a hop that CloudFront would have absorbed. It mitigates that with a local disk cache
   for immutable assets and HTTP keep-alive to S3.
-- Anything in the VPC that routes through the gateway endpoint could read `apps/*`. The
+- Anything in the VPC that routes through the gateway endpoint could read `builds/*`. The
   assets are the same for every authenticated user, so this is acceptable. Release records
   are not exposed.
 - If SSE-KMS is required, nginx must sign requests with the task role (for example the NGINX S3

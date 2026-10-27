@@ -1,0 +1,19 @@
+{
+  "name": "@govcloud-mfe/ownership-check",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fails CI when module ownership, CODEOWNERS and the app's composition disagree.",
+  "type": "module",
+  "scripts": {
+    "check": "tsx check.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@govcloud-mfe/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "@govcloud-mfe/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dashboard module, owned by team-insights. Compiled into @govcloud-mfe/web at build time.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@govcloud-mfe/contracts": "workspace:*",
+    "@govcloud-mfe/platform-sdk": "workspace:*",
+    "@govcloud-mfe/ui": "workspace:*"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "catalog:",
+    "react": "catalog:",
+    "react-router": "catalog:"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/react": "catalog:",
+    "jsdom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

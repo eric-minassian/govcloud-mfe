@@ -1,6 +1,6 @@
 //! `GET /api/health` — ALB target health check.
 //!
-//! Deliberately shallow: if S3 or AppConfig has a blip we want degraded
+//! Deliberately shallow: if AppConfig has a blip we want degraded
 //! responses, not every task pulled out of the target group at once.
 
 use axum::Json;

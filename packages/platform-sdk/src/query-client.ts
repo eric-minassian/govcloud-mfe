@@ -2,9 +2,8 @@ import { QueryClient } from '@tanstack/react-query';
 import { ApiError, SessionExpiredError } from './api-client';
 
 /**
- * The single QueryClient for the page. Created by the shell; remotes only ever see it through
- * React context, which works across federated modules because @tanstack/react-query is a
- * shared singleton.
+ * The single QueryClient for the page, created by the app. Every module reads from the same cache,
+ * so platform data (user, flags, preferences) is fetched once no matter how many modules use it.
  */
 export function createPlatformQueryClient(): QueryClient {
   return new QueryClient({

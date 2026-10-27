@@ -2,7 +2,7 @@
   "name": "@govcloud-mfe/release-cli",
   "version": "0.1.0",
   "private": true,
-  "description": "Publishes, promotes and rolls back micro-frontend versions in a stage's artifact bucket.",
+  "description": "Deploys, rolls back and inspects releases of the composed web app in a stage's artifact bucket.",
   "type": "module",
   "bin": {
     "release": "./src/cli.ts"

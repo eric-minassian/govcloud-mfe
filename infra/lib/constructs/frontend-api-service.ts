@@ -5,7 +5,6 @@ import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import type * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import type * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 import type { ProjectConfig, StageConfig } from '../config';
 import { clientErrorsMetric, naming, SESSION_COOKIE_NAME } from '../naming';
@@ -20,23 +19,27 @@ import {
 export interface FrontendApiServiceProps {
   readonly cluster: ecs.ICluster;
   readonly stage: StageConfig;
-  readonly assetsBucket: s3.IBucket;
   /** Expected `signer` of the ALB's x-amzn-oidc-data JWT. */
   readonly loadBalancerArn: string;
+  /** `web` plus every module: whose flags the API serves and whose telemetry it accepts. */
+  readonly appNames: string[];
   readonly appConfigAgentImage: ProjectConfig['appConfigAgentImage'];
 }
 
 /**
  * The Rust same-origin API (services/frontend-api) with the AWS AppConfig Agent as a sidecar.
  * The agent owns the AppConfig sessions, polling, caching and multi-variant flag evaluation. The API
- * makes plain HTTP calls to localhost:2772. Configuration contract: docs/contracts.md §7.
+ * makes plain HTTP calls to localhost:2772. Configuration contract: docs/contracts.md §9.
+ *
+ * In this variant the API needs no AWS permissions of its own: which modules exist is decided at
+ * build time, so there is no release registry to read from S3.
  */
 export class FrontendApiService extends Construct {
   readonly targetGroup: elbv2.ApplicationTargetGroup;
 
   constructor(scope: Construct, id: string, props: FrontendApiServiceProps) {
     super(scope, id);
-    const { stage, assetsBucket } = props;
+    const { stage } = props;
 
     const taskDefinition = createArmTaskDefinition(this, 'Task');
 
@@ -66,12 +69,13 @@ export class FrontendApiService extends Construct {
       environment: {
         APP_ENV: 'aws',
         PORT: String(CONTAINER_PORT),
+        // Adding a module therefore means redeploying this stack. That's expected: adding a module
+        // is already a platform change (composition list, CODEOWNERS).
+        APPS: props.appNames.join(','),
         AUTH_MODE: 'alb',
         ALB_ARN: props.loadBalancerArn,
         SESSION_COOKIE_NAME,
         LOGOUT_REDIRECT_URL: stage.oidc.logoutUrl,
-        RELEASES_SOURCE: 's3',
-        ASSETS_BUCKET: assetsBucket.bucketName,
         FLAGS_SOURCE: 'appconfig-agent',
         APPCONFIG_AGENT_URL: 'http://localhost:2772',
         APPCONFIG_APPLICATION_PREFIX: naming.appConfigApplicationPrefix,
@@ -82,7 +86,7 @@ export class FrontendApiService extends Construct {
       },
       readonlyRootFilesystem: true,
       // Client error events are written to stdout as Embedded Metric Format lines. CloudWatch Logs
-      // turns them into the ClientErrors metric that each app's rollback alarm watches.
+      // turns them into the ClientErrors metric that the app and module alarms watch.
       logging: containerLogging(this, 'Logs', 'frontend-api'),
     });
     // The agent image has no shell for a container health check, so wait for it to start. The API
@@ -92,25 +96,9 @@ export class FrontendApiService extends Construct {
       condition: ecs.ContainerDependencyCondition.START,
     });
 
-    // Read the release records (the module registry) and nothing else in the bucket.
-    taskDefinition.addToTaskRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['s3:ListBucket'],
-        resources: [assetsBucket.bucketArn],
-        conditions: { StringLike: { 's3:prefix': ['releases/*'] } },
-      }),
-    );
-    taskDefinition.addToTaskRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['s3:GetObject'],
-        resources: [assetsBucket.arnForObjects('releases/*')],
-      }),
-    );
-
-    // Used by the agent sidecar, which shares the task role. AppConfig ARNs contain generated IDs
-    // (application/a1b2c3d/...), not names, so the govcloud-mfe-* applications can't be selected
-    // by name. The boundary is "AppConfig applications in this account and region". Each app stack
-    // creates its own application, so the list is open-ended by design.
+    // The only permission in the task role, used by the agent sidecar. AppConfig ARNs contain
+    // generated IDs (application/a1b2c3d/...), not names, so the govcloud-mfe-* applications can't
+    // be selected by name. The boundary is "AppConfig applications in this account and region".
     taskDefinition.addToTaskRolePolicy(
       new iam.PolicyStatement({
         actions: ['appconfig:StartConfigurationSession', 'appconfig:GetLatestConfiguration'],

@@ -1,9 +1,4 @@
-import type {
-  CurrentUser,
-  FeatureFlags,
-  ModuleRegistry,
-  UserPreferences,
-} from '@govcloud-mfe/contracts';
+import type { CurrentUser, FeatureFlags, UserPreferences } from '@govcloud-mfe/contracts';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './api-client';
 
@@ -13,7 +8,7 @@ import { apiFetch } from './api-client';
  * @example const { data: user } = useQuery(platformQueries.currentUser());
  *
  * Defining them once (instead of inline `useQuery` calls) keeps keys, fetchers and cache timing
- * consistent between the shell and every remote, so they all share one cache entry.
+ * consistent between the app and every module, so they all share one cache entry.
  */
 export const platformQueries = {
   currentUser: () =>
@@ -21,13 +16,6 @@ export const platformQueries = {
       queryKey: ['platform', 'current-user'],
       queryFn: () => apiFetch<CurrentUser>('/api/me'),
       staleTime: Number.POSITIVE_INFINITY,
-    }),
-
-  modules: () =>
-    queryOptions({
-      queryKey: ['platform', 'modules'],
-      queryFn: () => apiFetch<ModuleRegistry>('/api/modules'),
-      staleTime: 60_000,
     }),
 
   featureFlags: () =>

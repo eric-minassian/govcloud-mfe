@@ -12,6 +12,7 @@ describe('PlatformStack', () => {
     const stack = new PlatformStack(app, 'Platform', {
       env: { account: prod.account, region: prod.region },
       stage: prod,
+      appNames: ['web', 'dashboard', 'settings'],
       appConfigAgentImage: config.appConfigAgentImage,
     });
     template = Template.fromStack(stack);
@@ -64,7 +65,7 @@ describe('PlatformStack', () => {
     });
   });
 
-  it('lets only the S3 gateway endpoint read build output and the shell entry document', () => {
+  it('lets only the S3 gateway endpoint read builds and the entry document', () => {
     const policies = template.findResources('AWS::S3::BucketPolicy');
     const statements = Object.values(policies).flatMap(
       (policy) => policy.Properties.PolicyDocument.Statement,
@@ -77,12 +78,37 @@ describe('PlatformStack', () => {
       Action: 's3:GetObject',
       Condition: { StringEquals: { 'aws:SourceVpce': { Ref: expect.stringMatching(/^VpcS3/) } } },
     });
-    expect(JSON.stringify(edgeRead.Resource)).toContain('/apps/*');
+    expect(JSON.stringify(edgeRead.Resource)).toContain('/builds/*');
     expect(JSON.stringify(edgeRead.Resource)).toContain('/index.html');
     expect(JSON.stringify(edgeRead.Resource)).not.toContain('releases');
   });
 
-  it('publishes the bucket name for app stacks and the release CLI', () => {
+  it('tells the frontend-api which apps exist, since there is no registry to read', () => {
+    template.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: Match.arrayWith([
+        Match.objectLike({
+          Name: 'frontend-api',
+          Environment: Match.arrayWith([{ Name: 'APPS', Value: 'web,dashboard,settings' }]),
+        }),
+      ]),
+    });
+  });
+
+  it('gives the frontend-api no S3 access at all', () => {
+    const apiPolicies = Object.values(template.findResources('AWS::IAM::Policy')).filter((policy) =>
+      JSON.stringify(policy.Properties.Roles).includes('FrontendApiTaskTaskRole'),
+    );
+    expect(apiPolicies.length).toBeGreaterThan(0);
+    const actions = apiPolicies
+      .flatMap((policy) => policy.Properties.PolicyDocument.Statement)
+      .flatMap((statement) => [statement.Action].flat());
+    expect(actions.sort()).toEqual([
+      'appconfig:GetLatestConfiguration',
+      'appconfig:StartConfigurationSession',
+    ]);
+  });
+
+  it('publishes the bucket name for the web stack and the release CLI', () => {
     template.hasResourceProperties('AWS::SSM::Parameter', {
       Name: '/govcloud-mfe/prod/assets-bucket-name',
     });

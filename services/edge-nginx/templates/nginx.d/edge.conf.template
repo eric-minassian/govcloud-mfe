@@ -8,8 +8,8 @@
 resolver ${DNS_RESOLVER} valid=30s ipv6=off;
 resolver_timeout 5s;
 
-# Versioned assets never change, so they can be cached on local disk indefinitely. This keeps
-# most requests off S3 and there is never anything to invalidate.
+# Builds never change, so their files can be cached on local disk indefinitely. This keeps most
+# requests off S3 and there is never anything to invalidate.
 proxy_cache_path /var/cache/nginx/assets levels=1:2 keys_zone=assets:10m max_size=1g
                  inactive=7d use_temp_path=off;
 
@@ -32,9 +32,9 @@ server {
     return 405;
   }
 
-  # Immutable build output: /apps/<app>/<version>/<file>. The URI is forwarded to S3 as-is, so
-  # it is restricted to a safe character set; anything else falls through to the 404 below.
-  location ~ "^/apps/[a-z][a-z0-9]*/[A-Za-z0-9_-]+/[A-Za-z0-9._/-]+$" {
+  # Immutable composed builds: /builds/<version>/<file>. The URI is forwarded to S3 as-is, so it
+  # is restricted to a safe character set; anything else falls through to the 404 below.
+  location ~ "^/builds/[A-Za-z0-9_-]+/[A-Za-z0-9._/-]+$" {
     include /etc/nginx/snippets/s3-origin.conf;
     proxy_pass https://$s3_host$uri;
     error_page 403 404 = @not_found;
@@ -51,13 +51,13 @@ server {
   }
 
   # Plain prefix (not `^~`) so the regex above is still tried first.
-  location /apps/ {
+  location /builds/ {
     return 404;
   }
 
-  # Every other path is a client-side route, so it gets the shell's entry document. That object
-  # is the shell's "live version" pointer: promote/rollback replace it, and `no-cache` makes
-  # browsers revalidate it (cheaply, via ETag) on every load so they see a release immediately.
+  # Every other path is a client-side route, so it gets the app's entry document. That object is
+  # the "live release" pointer: deploy and rollback replace it, and `no-cache` makes browsers
+  # revalidate it (cheaply, via ETag) on every load so they see a release immediately.
   location / {
     include /etc/nginx/snippets/s3-origin.conf;
     proxy_pass https://$s3_host/index.html;

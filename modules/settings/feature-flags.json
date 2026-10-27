@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "flags": {
+    "moduleEnabled": {
+      "name": "Module enabled",
+      "description": "Kill switch. When disabled the app hides this module from navigation and routing."
+    },
+    "compactDensity": {
+      "name": "Compact density option",
+      "description": "Offer the compact layout density in the preferences form."
+    }
+  },
+  "values": {
+    "moduleEnabled": { "enabled": true },
+    "compactDensity": { "enabled": true }
+  }
+}

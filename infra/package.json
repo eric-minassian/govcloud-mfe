@@ -2,7 +2,7 @@
   "name": "@govcloud-mfe/infra",
   "version": "0.1.0",
   "private": true,
-  "description": "AWS CDK app: shared platform, per-app runtime resources and per-app pipelines.",
+  "description": "AWS CDK app: shared platform, web and module runtime stacks, the delivery pipeline and per-team pipelines.",
   "type": "module",
   "scripts": {
     "cdk": "cdk",

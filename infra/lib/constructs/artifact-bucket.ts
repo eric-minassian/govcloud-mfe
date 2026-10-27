@@ -10,7 +10,7 @@ export interface ArtifactBucketProps {
 }
 
 /**
- * Holds every built version of every app, plus the release pointers (docs/contracts.md §2).
+ * Holds every composed build plus the release pointer (docs/contracts.md §3).
  * There is no CloudFront in GovCloud, so nginx proxies to this bucket from inside the VPC.
  */
 export class ArtifactBucket extends Construct {
@@ -37,13 +37,13 @@ export class ArtifactBucket extends Construct {
       // requests cannot use a KMS key to decrypt objects.
       encryption: s3.BucketEncryption.S3_MANAGED,
       objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
-      // Versioning turns the object history of releases/<app>.json into the release history
+      // Versioning turns the object history of releases/web.json into the release history
       // that rollbacks read.
       versioned: true,
       lifecycleRules: [
         {
           // Build output is never overwritten, so this only trims old release pointers.
-          // Current objects (every built version) are kept so open tabs never 404.
+          // Current objects (every build) are kept so open tabs never 404.
           noncurrentVersionExpiration: Duration.days(90),
           abortIncompleteMultipartUploadAfter: Duration.days(7),
         },
@@ -53,8 +53,8 @@ export class ArtifactBucket extends Construct {
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
-    // nginx sends unsigned requests, so it needs no AWS credentials or SigV4 support. Only build output
-    // and the shell's entry document are readable this way. Release records stay private.
+    // nginx sends unsigned requests, so it needs no AWS credentials or SigV4 support. Only builds and
+    // the entry document are readable this way. Release records stay private.
     // Block Public Access still applies in full: S3 does not count a policy as public when it is
     // limited to a fixed aws:SourceVpce.
     this.bucket.addToResourcePolicy(
@@ -62,7 +62,7 @@ export class ArtifactBucket extends Construct {
         sid: 'AllowEdgeReadsThroughVpcEndpoint',
         principals: [new iam.AnyPrincipal()],
         actions: ['s3:GetObject'],
-        resources: [this.bucket.arnForObjects('apps/*'), this.bucket.arnForObjects('index.html')],
+        resources: [this.bucket.arnForObjects('builds/*'), this.bucket.arnForObjects('index.html')],
         conditions: { StringEquals: { 'aws:SourceVpce': props.edgeEndpoint.vpcEndpointId } },
       }),
     );

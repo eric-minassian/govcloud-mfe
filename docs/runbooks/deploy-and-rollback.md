@@ -1,99 +1,101 @@
-# Runbook: deploying and rolling back a micro-frontend
+# Runbook: shipping, releasing and rolling back (build-time variant)
 
-Every app (the shell and each remote) has its own pipeline, `govcloud-mfe-<app>` (defined by
-the `GovcloudMfe-Pipeline-<app>` stack).
-Everything below applies to one app at a time. No step touches another team's module.
+Two separate things happen here:
 
-## Normal deploy
+- **Code ships on the delivery train.** Every merge to `main` that touches app or module code
+  runs `govcloud-mfe-web`, which deploys the whole composed app.
+- **Features are released with flags.** Each team turns its own features on and off through its
+  module's AppConfig application, deployed by its own `govcloud-mfe-<module>-flags` pipeline.
 
-1. Merge to `main`. The pipeline triggers only if the change touches `apps/<app>/**` or shared
-   code (`packages/**`, `tools/release/**`, `infra/**`, the lockfile).
-2. **Build** typechecks, tests and builds with `RELEASE_VERSION=<12-char commit SHA>`, then
-   synthesizes the app's stacks and bundles the release CLI into one artifact.
-3. **Deploy dev** deploys `GovcloudMfe-dev-App-<app>` (flags, alarm, release role) and runs
-   `release deploy`.
-4. **Approve** promotion to prod.
-5. **Deploy prod** does the same against prod. The stage's Bake action then watches
-   `govcloud-mfe-<app>-prod-client-errors` for 10 minutes.
+## Shipping code (any team)
 
-To see what is live:
+1. Open a PR. Your module's checks pipeline (`govcloud-mfe-<module>-checks`) runs lint, `turbo
+   boundaries`, the ownership check and your module's tests, and builds the composed app.
+   CODEOWNERS requires your team's review, plus the platform team's if you touched anything
+   outside your module.
+2. Merge. The train builds once, deploys dev, waits for approval, deploys prod, then bakes for 10
+   minutes watching every module's alarm.
+3. New behaviour should be behind a flag that defaults to off, so shipping it changes nothing for
+   users.
+
+To see what is live and what each release changed:
 
 ```sh
-pnpm release status --app dashboard --stage prod
+pnpm release status --stage prod
+# version       releasedAt   changed
+# ▶ 3f9c2a1b7d4e  ...          dashboard (team-insights)
+#   1a2b3c4d5e6f  ...          settings (team-accounts), dashboard (team-insights)
 ```
+
+## Releasing a feature (module team)
+
+1. Change the value in `modules/<module>/feature-flags.json`. Use a variant with a rule for a
+   percentage rollout or an allow-list.
+2. Merge. Your flags pipeline deploys your module's stack to dev, then prod after approval.
+   AppConfig rolls the change out with your module's deployment strategy (gradual in prod) and
+   **reverts it automatically** if your module's `ClientErrors` alarm fires.
+
+No other team's pipeline runs, and no code is deployed.
 
 ## Automatic rollbacks (no action needed)
 
-| What happened                                   | What rolls back                      | How                                   |
-| ----------------------------------------------- | ------------------------------------ | ------------------------------------- |
-| A deploy stage failed                           | That stage, to the last good release | CodePipeline `onFailure: ROLLBACK`    |
-| The client-errors alarm fired during prod bake  | The prod stage                       | Bake action fails → `onFailure: ROLLBACK` |
-| The alarm fired during a flag deployment        | The flag deployment                  | AppConfig environment monitor         |
-| A platform container failed health checks       | The ECS service                      | Deployment circuit breaker            |
+| What happened | What rolls back | How |
+| ------------- | --------------- | --- |
+| A train deploy stage failed | That stage, to the previous build | CodePipeline `onFailure: ROLLBACK` |
+| Any module's (or the web) alarm fired during the prod bake | The prod stage, to the previous build | Bake action fails, stage rolls back. The log names the module and owning team |
+| A module's alarm fired during its flag rollout | That module's flag deployment | AppConfig environment monitor |
+| A platform container failed health checks | The ECS service | Deployment circuit breaker |
 
-A stage rollback re-runs the stage with the previous good artifact. The app stack goes back to
-the previous flag definitions, and `release deploy` skips the upload (the version is already
-published) and moves the pointer back.
+## Manual rollback: choose the smallest option that works
 
-## Manual rollback
+### 1. Turn the feature off (seconds, module team)
 
-Choose the least drastic option that fixes the problem.
+Turn the flag off in your module's AppConfig application (`govcloud-mfe-<module>`, environment
+`prod`, profile `feature-flags`), or merge the change to `feature-flags.json`. A console change
+is overwritten by your next flags pipeline run, so follow up with a PR.
 
-### 1. Hide the module (seconds, remotes only)
+### 2. Hide the module (seconds, module team or platform on-call)
 
-Turn off the module's `moduleEnabled` flag in AppConfig (application `govcloud-mfe-<app>`,
-environment `prod`, profile `feature-flags`) and deploy it with the `AllAtOnce` strategy. Within
-about a minute the module disappears from navigation and its routes return "not found". Nothing
-else changes.
+Turn `moduleEnabled` off for the module. Within about a minute it disappears from navigation and
+its routes show "not found". Everything else keeps working.
 
-### 2. Roll back through the pipeline (preferred)
+### 3. Roll back the whole app (seconds, platform on-call)
 
-```sh
-aws codepipeline list-pipeline-executions --pipeline-name govcloud-mfe-dashboard \
-  --query 'pipelineExecutionSummaries[?status==`Succeeded`].[pipelineExecutionId,sourceRevisions[0].revisionId]'
-
-aws codepipeline rollback-stage \
-  --pipeline-name govcloud-mfe-dashboard \
-  --stage-name Deploy-prod \
-  --target-pipeline-execution-id <execution id>
-```
-
-This keeps the pipeline's view of what is deployed accurate. It also reverts the app's flag
-definitions and alarm along with the code.
-
-### 3. Break-glass pointer swap (seconds, no pipeline)
-
-Use this when the pipeline itself is unavailable:
+Preferred, through the pipeline:
 
 ```sh
-# Assumes credentials that can assume the app's release role in the prod account.
-pnpm release rollback --app dashboard --stage prod \
-  --role-arn arn:aws-us-gov:iam::<prod account>:role/govcloud-mfe-dashboard-prod-release
-# or to a specific version:
-pnpm release rollback --app dashboard --stage prod --to 1a2b3c4d5e6f --role-arn ...
+aws codepipeline rollback-stage --pipeline-name govcloud-mfe-web \
+  --stage-name Deploy-prod --target-pipeline-execution-id <last good execution id>
 ```
 
-Afterwards, **disable the pipeline's transition into Deploy-prod** until a fix is merged.
-Otherwise the next execution re-releases the bad version:
+Break-glass, when the pipeline itself is unavailable:
 
 ```sh
-aws codepipeline disable-stage-transition --pipeline-name govcloud-mfe-dashboard \
-  --stage-name Deploy-prod --transition-type Inbound --reason "Rolled back <version>, see <ticket>"
+pnpm release rollback --stage prod \
+  --role-arn arn:aws-us-gov:iam::<prod account>:role/govcloud-mfe-web-prod-release
+# [web/prod] Rolling back 3f9c2a1b7d4e → 1a2b3c4d5e6f
+# [web/prod] Reverts: dashboard (team-insights)
 ```
 
-### What users see after a rollback
+This reverts **every** module to the target build. The output says whose changes are undone.
+Tell those teams, and pause the train (`aws codepipeline disable-stage-transition
+--pipeline-name govcloud-mfe-web --stage-name Deploy-prod --transition-type Inbound --reason
+"..."`) until the fix is merged.
 
-- New page loads get the rolled-back version as soon as the frontend API's release cache
-  refreshes (a few seconds). For the shell, it's the next `index.html` revalidation, which happens
-  on every load.
-- Open tabs keep running the version they loaded until they reload. Its files are still in S3.
+### 4. Take back one team's change, keep everyone else's (minutes)
 
-## Adding a new module
+`git revert` the offending merge and merge the revert. The train ships it like any other change.
+If the whole app was rolled back in step 3, this is how the other teams' changes get back to
+production.
 
-1. Copy `apps/dashboard` to `apps/<name>` and edit `microfrontend.json` (`name`, `route`,
-   `displayName`, `owner`, `devPort`) and `feature-flags.json`. Keep the `moduleEnabled` flag.
-2. Add a `dev/releases/<name>.json` record for local development.
-3. Deploy its pipeline: `pnpm --filter @govcloud-mfe/infra cdk deploy GovcloudMfe-Pipeline-<name>`.
-   The CDK app discovers apps from `apps/*/microfrontend.json`.
-4. Merge. The new pipeline deploys the module's stack and first release, and the shell picks it
-   up from `/api/modules` without being redeployed.
+## Adding a module
+
+1. Create `modules/<name>/` (copy `modules/settings`): `module.json` (`name`, `displayName`,
+   `route`, `owner`), `feature-flags.json` with `moduleEnabled`, `package.json` named
+   `@govcloud-mfe/<name>`, and `turbo.json` tagged `module`.
+2. Add `/modules/<name>/ @example-agency/<owner>` to `.github/CODEOWNERS`.
+3. In one platform-reviewed PR, add the package to `apps/web/package.json` and the import to
+   `apps/web/src/modules.ts`. `pnpm check:ownership` fails until all three agree.
+4. Deploy the module's pipelines (`cdk deploy GovcloudMfe-Pipeline-Module-<name>`) and redeploy
+   the platform stack so the frontend API's `APPS` includes the module. The module's flags
+   pipeline then creates its AppConfig application and alarm, and the train ships its code.

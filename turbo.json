@@ -17,5 +17,19 @@
       "cache": false,
       "persistent": true
     }
+  },
+  "boundaries": {
+    "tags": {
+      "module": {
+        "dependencies": {
+          "deny": ["module", "app"]
+        }
+      },
+      "platform": {
+        "dependencies": {
+          "deny": ["module", "app"]
+        }
+      }
+    }
   }
 }

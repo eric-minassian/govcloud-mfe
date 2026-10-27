@@ -7,11 +7,12 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --filter=@govcloud-mfe/shell --filter=@govcloud-mfe/dashboard --filter=@govcloud-mfe/settings --filter=@govcloud-mfe/frontend-api",
+    "dev": "turbo run dev --filter=@govcloud-mfe/web --filter=@govcloud-mfe/frontend-api",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "lint": "biome check .",
+    "lint": "biome check . && turbo boundaries && pnpm run check:ownership",
     "format": "biome check --write .",
+    "check:ownership": "pnpm --filter @govcloud-mfe/ownership-check run check",
     "release": "pnpm --filter @govcloud-mfe/release-cli run cli"
   },
   "devDependencies": {

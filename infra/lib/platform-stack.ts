@@ -13,6 +13,8 @@ import { naming } from './naming';
 
 export interface PlatformStackProps extends StackProps {
   readonly stage: StageConfig;
+  /** `web` plus every module name. */
+  readonly appNames: string[];
   readonly appConfigAgentImage: ProjectConfig['appConfigAgentImage'];
 }
 
@@ -28,8 +30,8 @@ const SIGNED_OUT_PAGE =
  *   browser ──HTTPS──▶ ALB (OIDC on every request) ──┬─ /api/*  ▶ frontend-api (Rust) + AppConfig Agent
  *                                                    └─ /*      ▶ edge (nginx) ──VPC endpoint──▶ S3
  *
- * Apps never deploy this stack. Their pipelines write to the artifact bucket and deploy their own
- * AppStack. The two are joined only by the SSM parameter that holds the bucket name.
+ * The delivery pipeline never deploys this stack. It writes builds to the artifact bucket and
+ * deploys the WebStack; the two are joined only by the SSM parameter that holds the bucket name.
  */
 export class PlatformStack extends Stack {
   /**
@@ -76,12 +78,12 @@ export class PlatformStack extends Stack {
 
     const artifacts = new ArtifactBucket(this, 'Artifacts', { edgeEndpoint: s3Endpoint });
 
-    // App stacks and the release CLI look the bucket up by this name. Loose coupling keeps each app
-    // deployable without a CloudFormation export tying it to this stack.
+    // The web stack and the release CLI look the bucket up by this name. Loose coupling keeps the
+    // web stack deployable without a CloudFormation export tying it to this stack.
     new ssm.StringParameter(this, 'AssetsBucketNameParameter', {
       parameterName: naming.assetsBucketParameter(stage.name),
       stringValue: artifacts.bucket.bucketName,
-      description: 'Artifact bucket for micro-frontend builds and release records',
+      description: 'Artifact bucket for composed web builds and the release record',
     });
 
     const alb = new AuthenticatedLoadBalancer(this, 'Alb', {
@@ -102,8 +104,8 @@ export class PlatformStack extends Stack {
     const api = new FrontendApiService(this, 'FrontendApi', {
       cluster,
       stage,
-      assetsBucket: artifacts.bucket,
       loadBalancerArn: alb.loadBalancer.loadBalancerArn,
+      appNames: props.appNames,
       appConfigAgentImage: props.appConfigAgentImage,
     });
 
@@ -124,7 +126,7 @@ export class PlatformStack extends Stack {
         elbv2.UnauthenticatedAction.DENY,
       ),
     });
-    // Everything else (index.html for any SPA route, and /apps/** assets) goes to nginx.
+    // Everything else (index.html for any client-side route, and /builds/** assets) goes to nginx.
     alb.listener.addAction('Default', {
       action: alb.authenticated(elbv2.ListenerAction.forward([edge.targetGroup])),
     });
